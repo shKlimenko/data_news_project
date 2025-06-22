@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # Hadoop HDFS
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    restart: always
+    ports:
+      - "9870:9870"  # HDFS Web UI
+      - "9000:8020"  # HDFS Service
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+      - ./allow_nodes:/etc/hadoop/allow_nodes
+    environment:
+      - CLUSTER_NAME=spark-hadoop-cluster
+      - HDFS_CONF_dfs_hosts_allow=/etc/hadoop/allow_nodes
+    env_file:
+      - ./hadoop.env
+
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode1
+    restart: always
+    volumes:
+      - hadoop_datanode1:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode2
+    restart: always
+    volumes:
+      - hadoop_datanode2:/hadoop/dfs/data2
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+      
+  # YARN Resource Manager
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: resourcemanager
+    hostname: resourcemanager
+    ports:
+      - "8089:8088"  # YARN Web UI
+    depends_on:
+      - namenode
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    env_file:
+      - ./hadoop.env
+
+  nodemanager:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: nodemanager
+    hostname: nodemanager
+    depends_on:
+      - resourcemanager
+    env_file:
+      - ./hadoop.env
+
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: historyserver
+    hostname: historyserver
+    ports:
+      - "8188:8188"  # History Server UI
+    depends_on:
+      - namenode
+    env_file:
+      - ./hadoop.env
+
+  # Spark Cluster
+  spark-master:
+    image: bde2020/spark-master
+    container_name: spark-master
+    hostname: spark-master
+    ports:
+      - "8090:8080"  # Spark Master UI
+      - "7077:7077"  # Spark Master Port
+    depends_on:
+      - resourcemanager
+      - namenode
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+
+  spark-worker:
+    image: bde2020/spark-worker
+    container_name: spark-worker
+    hostname: spark-worker
+    ports:
+      - "8081:8081"  # Spark Worker UI
+    depends_on:
+      - spark-master
+      - resourcemanager
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=4g
+      - SPARK_WORKER_CORES=2
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode1:
+  hadoop_datanode2:
